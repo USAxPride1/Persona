@@ -1,7 +1,11 @@
 import discord
 from discord.ext import commands
 import asyncio
+import logging
 from config import DISCORD_TOKEN
+
+# Enable debug logging so sync errors show in Railway logs
+logging.basicConfig(level=logging.INFO)
 
 # ---------- Bot Setup ----------
 intents = discord.Intents.default()
@@ -31,15 +35,6 @@ async def load_cogs():
             print(f"Failed to load {cog}: {e}")
 
 
-# ---------- Auto Slash Sync ----------
-async def sync_slash_commands():
-    try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} slash commands.")
-    except Exception as e:
-        print("Slash command sync failed:", e)
-
-
 # ---------- Test Slash Command (/ping) ----------
 @bot.tree.command(name="ping", description="Check if the bot is alive.")
 async def ping(interaction: discord.Interaction):
@@ -50,8 +45,23 @@ async def ping(interaction: discord.Interaction):
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    print("Syncing slash commands…")
-    await sync_slash_commands()
+
+    # 🔥 TEMP FIX: Clear old slash commands from Discord
+    try:
+        print("Clearing existing global slash commands...")
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync()
+        print("🔥 Cleared all global slash commands.")
+    except Exception as e:
+        print("❌ Clear failed:", e)
+
+    # Now sync ALL commands cleanly
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} slash commands.")
+    except Exception as e:
+        print("❌ Sync failed:", e)
+
     print("Bot is now online.")
 
 

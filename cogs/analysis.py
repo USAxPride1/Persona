@@ -7,17 +7,18 @@ from openai import OpenAI
 
 class Analysis(commands.Cog):
     def __init__(self, bot):
-        super().__init__()  # REQUIRED for proper slash command behavior
+        super().__init__()
         self.bot = bot
 
-        # Mongo setup
+        # MongoDB setup
         try:
             self.cluster = MongoClient(MONGO_URI)
             self.db = self.cluster["persona_bot"]
             self.messages = self.db["messages"]
             self.sim_batches = self.db["simulation_batches"]
+            print("✅ Analysis: MongoDB connected.")
         except Exception as e:
-            print(f"MongoDB connection skipped in Analysis: {e}")
+            print(f"❌ Analysis: MongoDB connection failed: {e}")
             self.db = None
             self.messages = None
             self.sim_batches = None
@@ -25,8 +26,9 @@ class Analysis(commands.Cog):
         # OpenAI setup
         try:
             self.client = OpenAI(api_key=OPENAI_API_KEY)
+            print("✅ OpenAI client initialized.")
         except Exception as e:
-            print(f"OpenAI client init failed: {e}")
+            print(f"❌ OpenAI init failed: {e}")
             self.client = None
 
     # ------------------------------------------------------------
@@ -57,13 +59,13 @@ You will receive a batch of this user's recent Discord messages.
 These may include profanity, strong opinions, or socially condemned views.
 
 Your job:
-- Analyze their tone, patterns, emotional cycles, and identity themes.
-- Describe communication style.
+- Analyze their tone, emotional cycles, and identity themes.
+- Describe their communication patterns and rigidity.
 - Do NOT judge, argue, or advise.
 - Reflect what is present.
 
 Messages:
-\"\"\"{joined}\"\"\"\
+\"\"\"{joined}\"\"\"
 
 Write a structured analysis under 600 words.
 End with one sentence that feels like a mirror.
@@ -75,6 +77,7 @@ End with one sentence that feels like a mirror.
     # ------------------------------------------------------------
     async def _call_openai(self, prompt: str) -> str | None:
         if not self.client:
+            print("❌ OpenAI client not initialized.")
             return None
 
         try:
@@ -88,19 +91,32 @@ End with one sentence that feels like a mirror.
             )
             return response.choices[0].message.content
         except Exception as e:
-            print(f"OpenAI error: {e}")
+            print(f"❌ OpenAI API Error: {e}")
             return None
 
     # ------------------------------------------------------------
-    # Realtime analysis after 250 messages
+    # Safe summary sender (Discord 2000 char limit)
+    # ------------------------------------------------------------
+    async def send_summary(self, channel: discord.TextChannel, header: str, summary: str):
+        try:
+            await channel.send(header)
+
+            # Split into safe chunks
+            for i in range(0, len(summary), 1900):
+                chunk = summary[i:i+1900]
+                await channel.send(f"```markdown\n{chunk}\n```")
+        except Exception as e:
+            print(f"❌ Error sending summary: {e}")
+
+    # ------------------------------------------------------------
+    # Realtime analysis (250 messages)
     # ------------------------------------------------------------
     async def run_realtime_analysis(self, user_id: str, guild_id: str, display_name: str):
         insights = self.get_insights_channel()
         if insights is None:
-            print("No #ai-insights channel found.")
+            print("❌ No #ai-insights channel found.")
             return
 
-        # FIXED: check None
         if self.messages is None:
             await insights.send("⚠️ No database connection for analysis.")
             return
@@ -119,7 +135,7 @@ End with one sentence that feels like a mirror.
         prompt = self.build_prompt(text_batch, "mirror")
 
         await insights.send(
-            f"📥 **Collected 250 messages for {display_name}. Running Mirror analysis...**"
+            f"📥 **Collected {len(text_batch)} messages for {display_name}. Running Mirror analysis...**"
         )
 
         summary = await self._call_openai(prompt)
@@ -127,9 +143,10 @@ End with one sentence that feels like a mirror.
             await insights.send("⚠️ Analysis failed (OpenAI issue).")
             return
 
-        await insights.send(
-            f"🪞 **The Mirror — Analysis for {display_name} (<@{user_id}>)**\n"
-            f"```markdown\n{summary}\n```"
+        await self.send_summary(
+            insights,
+            f"🪞 **The Mirror — Analysis for {display_name} (<@{user_id}>)**",
+            summary
         )
 
     # ------------------------------------------------------------
@@ -138,10 +155,9 @@ End with one sentence that feels like a mirror.
     async def run_simulation_analysis(self, user_id: str, guild_id: str | None = None):
         insights = self.get_insights_channel()
         if insights is None:
-            print("No #ai-insights channel found.")
+            print("❌ No #ai-insights channel found for simulation.")
             return
 
-        # FIXED
         if self.sim_batches is None:
             await insights.send("⚠️ No simulation_batches collection available.")
             return
@@ -163,10 +179,12 @@ End with one sentence that feels like a mirror.
             await insights.send("⚠️ Simulation analysis failed.")
             return
 
-        await insights.send(
-            f"🪞 **The Mirror — Simulation Analysis for <@{user_id}>**\n"
-            f"```markdown\n{summary}\n```"
+        await self.send_summary(
+            insights,
+            f"🪞 **The Mirror — Simulation Analysis for <@{user_id}>**",
+            summary
         )
+
 
 async def setup(bot):
     print("🚀 Analysis cog LOADED")

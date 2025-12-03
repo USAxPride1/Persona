@@ -4,8 +4,8 @@ import asyncio
 import logging
 from config import DISCORD_TOKEN
 
-# Enable debug logging so sync errors show in Railway logs
-logging.basicConfig(level=logging.INFO)
+# Enable maximum debug logging to capture hidden sync errors
+logging.basicConfig(level=logging.DEBUG)
 
 # ---------- Bot Setup ----------
 intents = discord.Intents.default()
@@ -46,21 +46,30 @@ async def ping(interaction: discord.Interaction):
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
-    # 🔥 TEMP FIX: Clear old slash commands from Discord
+    # ----------------------------------------------------------
+    # TEMP FIX: wipe all slash commands to remove corrupted ones
+    # ----------------------------------------------------------
+    print("Clearing existing global slash commands...")
+
     try:
-        print("Clearing existing global slash commands...")
         bot.tree.clear_commands(guild=None)
         await bot.tree.sync()
         print("🔥 Cleared all global slash commands.")
     except Exception as e:
-        print("❌ Clear failed:", e)
+        print("❌ Clear FAILED:")
+        print(e)
 
-    # Now sync ALL commands cleanly
+    # ----------------------------------------------------------
+    # Now attempt to sync the fresh commands + SHOW ERRORS
+    # ----------------------------------------------------------
+    print("⏳ Attempting to sync slash commands...")
+
     try:
         synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} slash commands.")
+        print(f"✅ Successfully synced {len(synced)} commands.")
     except Exception as e:
-        print("❌ Sync failed:", e)
+        print("❌ Sync FAILED with exception:")
+        print(e)
 
     print("Bot is now online.")
 

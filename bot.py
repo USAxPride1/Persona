@@ -13,7 +13,7 @@ logging.getLogger("discord.bot").setLevel(logging.INFO)
 
 # ---------- Bot Setup ----------
 intents = discord.Intents.default()
-intents.message_content = True  # required for tracking cog
+intents.message_content = True
 
 bot = commands.Bot(
     command_prefix="!",
@@ -39,7 +39,7 @@ async def load_cogs():
             print(f"Failed to load {cog}: {e}")
 
 
-# ---------- Test Slash Command (/ping) ----------
+# ---------- Slash Command (/ping) ----------
 @bot.tree.command(name="ping", description="Check if the bot is alive.")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("Pong! 🏓", ephemeral=True)
@@ -50,9 +50,7 @@ async def ping(interaction: discord.Interaction):
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
-    # Sync fresh commands (DO NOT CLEAR AFTER LOADING)
     print("⏳ Syncing slash commands...")
-
     try:
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} commands.")
@@ -65,11 +63,6 @@ async def on_ready():
 # ---------- Runner ----------
 async def main():
     async with bot:
-        # Clear old commands BEFORE loading cogs:
-        print("🔥 Clearing old slash commands...")
-        bot.tree.clear_commands(guild=None)
-        await bot.tree.sync()
-
         await load_cogs()
         await bot.start(DISCORD_TOKEN)
 

@@ -13,7 +13,7 @@ logging.getLogger("discord.bot").setLevel(logging.INFO)
 
 # ---------- Bot Setup ----------
 intents = discord.Intents.default()
-intents.message_content = True
+intents.message_content = True  # required for tracking cog
 
 bot = commands.Bot(
     command_prefix="!",
@@ -29,6 +29,7 @@ COGS = [
 ]
 
 
+# ---------- Load All Cogs ----------
 async def load_cogs():
     for cog in COGS:
         try:
@@ -38,35 +39,43 @@ async def load_cogs():
             print(f"Failed to load {cog}: {e}")
 
 
+# ---------- Test Slash Command (/ping) ----------
 @bot.tree.command(name="ping", description="Check if the bot is alive.")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message("Pong! 🏓", ephemeral=True)
 
 
+# ---------- Events ----------
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
-    print("Clearing existing global slash commands...")
+    # Full wipe of commands (global + guild)
+    print("Clearing ALL slash commands (global + guild)...")
 
     try:
         bot.tree.clear_commands(guild=None)
+        for guild in bot.guilds:
+            bot.tree.clear_commands(guild=guild)
+
         await bot.tree.sync()
-        print("🔥 Cleared all global slash commands.")
+        print("🔥 Cleared all commands globally AND per guild.")
     except Exception as e:
         print("❌ Clear FAILED:", e)
 
-    print("⏳ Attempting to sync fresh slash commands...")
+    # Sync fresh commands
+    print("⏳ Attempting to sync fresh commands...")
 
     try:
         synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} slash commands.")
+        print(f"✅ Synced {len(synced)} commands.")
     except Exception as e:
         print("❌ Sync FAILED:", e)
 
     print("Bot is now online.")
 
 
+# ---------- Runner ----------
 async def main():
     async with bot:
         await load_cogs()

@@ -3,6 +3,7 @@ from discord.ext import commands
 from config import MONGO_URI
 from pymongo import MongoClient
 
+
 class Tracking(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -19,24 +20,28 @@ class Tracking(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
 
+        # ignore bots
         if message.author.bot:
             return
 
+        # ignore DMs
         if isinstance(message.channel, discord.DMChannel):
             return
 
+        # ignore non-text content
         if message.attachments or message.embeds or message.stickers:
             return
         if not message.content or message.content.strip() == "":
             return
 
-        # FIXED: collection boolean test
+        # If DB is not connected, do NOT crash the bot
         if self.messages is None:
             return
 
         user_id = str(message.author.id)
         guild_id = str(message.guild.id)
 
+        # SAFE DATABASE INSERT — will not crash bot on error
         try:
             self.messages.insert_one({
                 "user_id": user_id,
@@ -44,19 +49,23 @@ class Tracking(commands.Cog):
                 "content": message.content,
                 "timestamp": message.created_at
             })
-        except Exception:
+        except Exception as e:
+            print(f"[Tracking] Mongo insert failed: {e}")
             return
 
+        # Count total messages (XP)
         try:
             total_xp = self.messages.count_documents({
                 "user_id": user_id,
                 "guild_id": guild_id
             })
-        except Exception:
-            total_xp = 0
+        except Exception as e:
+            print(f"[Tracking] Mongo count failed: {e}")
+            return
 
         cycle = total_xp % 250
 
+        # Alert #1 — 50 away
         if cycle == 200:
             try:
                 await message.channel.send(
@@ -65,6 +74,7 @@ class Tracking(commands.Cog):
             except:
                 pass
 
+        # Alert #2 — 25 away
         if cycle == 225:
             try:
                 await message.channel.send(
@@ -73,6 +83,7 @@ class Tracking(commands.Cog):
             except:
                 pass
 
+        # Trigger every 250 messages
         if cycle == 0 and total_xp != 0:
             try:
                 await message.channel.send(
@@ -81,6 +92,7 @@ class Tracking(commands.Cog):
             except:
                 pass
 
+            # Call analysis cog
             try:
                 await self.bot.analysis_cog.run_realtime_analysis(
                     user_id=user_id,
@@ -88,7 +100,8 @@ class Tracking(commands.Cog):
                     display_name=message.author.display_name
                 )
             except Exception as e:
-                print(f"Error triggering realtime analysis: {e}")
+                print(f"[Tracking] Analysis trigger failed: {e}")
+
 
 async def setup(bot):
     await bot.add_cog(Tracking(bot))

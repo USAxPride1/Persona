@@ -50,21 +50,8 @@ async def ping(interaction: discord.Interaction):
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
-    # Full wipe of commands (global + guild)
-    print("Clearing ALL slash commands (global + guild)...")
-
-    try:
-        bot.tree.clear_commands(guild=None)
-        for guild in bot.guilds:
-            bot.tree.clear_commands(guild=guild)
-
-        await bot.tree.sync()
-        print("🔥 Cleared all commands globally AND per guild.")
-    except Exception as e:
-        print("❌ Clear FAILED:", e)
-
-    # Sync fresh commands
-    print("⏳ Attempting to sync fresh commands...")
+    # Sync fresh commands (DO NOT CLEAR AFTER LOADING)
+    print("⏳ Syncing slash commands...")
 
     try:
         synced = await bot.tree.sync()
@@ -78,6 +65,11 @@ async def on_ready():
 # ---------- Runner ----------
 async def main():
     async with bot:
+        # Clear old commands BEFORE loading cogs:
+        print("🔥 Clearing old slash commands...")
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync()
+
         await load_cogs()
         await bot.start(DISCORD_TOKEN)
 

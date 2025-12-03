@@ -7,9 +7,10 @@ from pymongo import MongoClient
 
 class Simulation(commands.Cog):
     def __init__(self, bot):
-        super().__init__()  # IMPORTANT: ensures slash commands register
+        super().__init__()  # ensures slash commands register correctly
         self.bot = bot
 
+        # Connect to MongoDB
         try:
             self.cluster = MongoClient(MONGO_URI)
             self.db = self.cluster["persona_bot"]
@@ -21,6 +22,7 @@ class Simulation(commands.Cog):
             self.sim_batches = None
             self.messages = None
 
+    # Channel finder
     def get_insights_channel(self):
         for guild in self.bot.guilds:
             for channel in guild.text_channels:
@@ -29,7 +31,7 @@ class Simulation(commands.Cog):
         return None
 
     # -------------------------------------------------------------------
-    # /simulate_messages
+    # /simulate_messages  — save last N messages of ANY user
     # -------------------------------------------------------------------
     @app_commands.command(
         name="simulate_messages",
@@ -43,7 +45,7 @@ class Simulation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        # FIXED: must check None, not boolean
+        # FIXED: collection cannot be boolean tested
         if self.messages is None or self.sim_batches is None:
             await interaction.followup.send("⚠️ Database not available.", ephemeral=True)
             return
@@ -51,16 +53,15 @@ class Simulation(commands.Cog):
         user_id = str(target_user.id)
         guild_id = str(interaction.guild_id)
 
-        # Pull from MongoDB
+        # Pull message history from Mongo
         docs = list(
             self.messages.find(
                 {"user_id": user_id, "guild_id": guild_id}
             ).sort("timestamp", -1).limit(amount)
         )
-
         text_batch = [d["content"] for d in docs]
 
-        # Save to simulation batch
+        # Save batch
         self.sim_batches.update_one(
             {"user_id": user_id},
             {"$set": {"messages": text_batch}},
@@ -72,18 +73,18 @@ class Simulation(commands.Cog):
             ephemeral=True
         )
 
-        # Send preview to #ai-insights
+        # Send preview to insights
         insights = self.get_insights_channel()
         if insights:
             preview = "\n".join(text_batch[:10]) if text_batch else "No messages found."
             await insights.send(
                 f"🔧 **Simulation batch updated for {target_user.display_name}**\n"
-                f"Total messages in batch: **{len(text_batch)}**\n\n"
+                f"Total messages: **{len(text_batch)}**\n\n"
                 f"**Preview (first 10):**\n```{preview}```"
             )
 
     # -------------------------------------------------------------------
-    # /simulate_analysis
+    # /simulate_analysis — analyze simulation batch
     # -------------------------------------------------------------------
     @app_commands.command(
         name="simulate_analysis",
@@ -97,7 +98,7 @@ class Simulation(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         await interaction.followup.send(
-            f"Running simulation analysis for **{target_user.display_name}**... check **#ai-insights**.",
+            f"Running simulation analysis for **{target_user.display_name}**… check **#ai-insights**.",
             ephemeral=True
         )
 
@@ -112,6 +113,17 @@ class Simulation(commands.Cog):
                 await insights.send(f"⚠️ Error running simulation analysis: {e}")
 
 
+# -------------------------------------------------------------------
+# Cog setup — forces slash commands to register on bot.tree
+# -------------------------------------------------------------------
 async def setup(bot):
-    print("🚀 Simulation cog LOADED")  # Useful confirmation
-    await bot.add_cog(Simulation(bot))
+    print("🚀 Simulation cog LOADED")
+
+    cog = Simulation(bot)
+
+    # Add cog to bot
+    await bot.add_cog(cog)
+
+    # FORCE REGISTER slash commands so Railway syncs them
+    bot.tree.add_command(cog.simulate_messages)
+    bot.tree.add_command(cog.simulate_analysis)

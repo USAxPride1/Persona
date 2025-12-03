@@ -4,7 +4,6 @@ from discord import app_commands
 from config import MONGO_URI
 from pymongo import MongoClient
 
-
 class Simulation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -27,9 +26,6 @@ class Simulation(commands.Cog):
                     return channel
         return None
 
-    # ---------------------------------------------------
-    # /simulate_messages — now works for ANY user
-    # ---------------------------------------------------
     @app_commands.command(
         name="simulate_messages",
         description="Save the last N messages from ANY user as a simulation batch."
@@ -42,14 +38,14 @@ class Simulation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        if not self.messages or not self.sim_batches:
+        # FIXED: boolean test on collections
+        if self.messages is None or self.sim_batches is None:
             await interaction.followup.send("⚠️ Database not available.", ephemeral=True)
             return
 
         user_id = str(target_user.id)
         guild_id = str(interaction.guild_id)
 
-        # Pull messages from MongoDB
         docs = list(
             self.messages.find(
                 {"user_id": user_id, "guild_id": guild_id}
@@ -58,7 +54,6 @@ class Simulation(commands.Cog):
 
         text_batch = [d["content"] for d in docs]
 
-        # Save to simulation batch
         self.sim_batches.update_one(
             {"user_id": user_id},
             {"$set": {"messages": text_batch}},
@@ -70,7 +65,6 @@ class Simulation(commands.Cog):
             ephemeral=True
         )
 
-        # Send preview to #ai-insights
         insights = self.get_insights_channel()
         if insights:
             preview = "\n".join(text_batch[:10]) if text_batch else "No messages found."
@@ -80,9 +74,6 @@ class Simulation(commands.Cog):
                 f"**Preview (first 10):**\n```{preview}```"
             )
 
-    # ---------------------------------------------------
-    # /simulate_analysis — runs analysis for ANY user
-    # ---------------------------------------------------
     @app_commands.command(
         name="simulate_analysis",
         description="Run Mirror analysis on ANY user’s saved simulation batch."
@@ -94,8 +85,6 @@ class Simulation(commands.Cog):
     ):
         await interaction.response.defer(ephemeral=True)
 
-        user_id = str(target_user.id)
-
         await interaction.followup.send(
             f"Running simulation analysis for **{target_user.display_name}**… check **#ai-insights**.",
             ephemeral=True
@@ -103,14 +92,13 @@ class Simulation(commands.Cog):
 
         try:
             await self.bot.analysis_cog.run_simulation_analysis(
-                user_id=user_id,
+                user_id=str(target_user.id),
                 guild_id=str(interaction.guild_id)
             )
         except Exception as e:
             insights = self.get_insights_channel()
             if insights:
                 await insights.send(f"⚠️ Error running simulation analysis: {e}")
-
 
 async def setup(bot):
     await bot.add_cog(Simulation(bot))

@@ -8,7 +8,6 @@ class Analysis(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        # Mongo
         try:
             self.cluster = MongoClient(MONGO_URI)
             self.db = self.cluster["persona_bot"]
@@ -20,14 +19,12 @@ class Analysis(commands.Cog):
             self.messages = None
             self.sim_batches = None
 
-        # OpenAI
         try:
             self.client = OpenAI(api_key=OPENAI_API_KEY)
         except Exception as e:
             print(f"OpenAI client init failed: {e}")
             self.client = None
 
-    # find #ai-insights
     def get_insights_channel(self) -> discord.TextChannel | None:
         for guild in self.bot.guilds:
             for channel in guild.text_channels:
@@ -38,12 +35,9 @@ class Analysis(commands.Cog):
     def build_prompt(self, text_batch: list[str], persona_name: str = "mirror") -> str:
         joined = "\n".join(text_batch)
 
-        # get persona style from Personas cog
-        style_block = ""
         try:
             style_block = self.bot.persona_manager.get_persona_style(persona_name)
-        except Exception:
-            # fallback in case Personas cog isn't ready
+        except:
             style_block = "You are The Mirror, a neutral psychological observer.\n"
 
         base = f"""
@@ -58,16 +52,14 @@ These come from a political / debate / high-intensity server, so expect:
 Your job:
 - Analyze patterns in tone, emotion, and identity.
 - Describe how they tend to communicate.
-- Mention their conviction style (for example: “You hold to your beliefs with a rigid, unwavering intensity, even when those beliefs place you far outside what most people would consider acceptable.”) when appropriate.
-- Do NOT argue with them, debunk them, or praise them.
-- You are not giving advice; you are describing what is there.
+- Mention their conviction style when appropriate.
+- Do NOT argue or give advice.
 
 Messages:
-\"\"\"{joined}\"\"\"
+\"\"\"{joined}\"\"\"\
 
-Now write a structured analysis with short headings, in clear paragraphs.
-Keep it under ~600 words.
-End with one single-sentence observation that feels like a mirror, not advice.
+Write a structured analysis under 600 words.
+End with one mirror-like sentence.
 """
         return base
 
@@ -79,7 +71,7 @@ End with one single-sentence observation that feels like a mirror, not advice.
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You analyze user message histories and summarize psychological and communication patterns."},
+                    {"role": "system", "content": "You analyze user communication patterns."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=800,
@@ -90,22 +82,22 @@ End with one single-sentence observation that feels like a mirror, not advice.
             return None
 
     async def run_realtime_analysis(self, user_id: str, guild_id: str, display_name: str):
-        """Used by Tracking when a user hits 250 messages."""
         insights_channel = self.get_insights_channel()
         if insights_channel is None:
             print("No #ai-insights channel found.")
             return
 
-        if not self.messages:
+        # FIXED
+        if self.messages is None:
             await insights_channel.send("⚠️ No database connection for analysis.")
             return
 
-        # last 250 messages from this user in this guild
         docs = list(
             self.messages.find(
                 {"user_id": user_id, "guild_id": guild_id}
             ).sort("timestamp", -1).limit(250)
         )
+
         if not docs:
             await insights_channel.send(
                 f"⚠️ No messages found for <@{user_id}> to analyze."
@@ -116,7 +108,6 @@ End with one single-sentence observation that feels like a mirror, not advice.
 
         prompt = self.build_prompt(text_batch, persona_name="mirror")
 
-        # optional: small preview
         await insights_channel.send(
             f"📥 **Collected 250 messages for {display_name}. Running Mirror analysis...**"
         )
@@ -132,13 +123,13 @@ End with one single-sentence observation that feels like a mirror, not advice.
         )
 
     async def run_simulation_analysis(self, user_id: str, guild_id: str | None = None):
-        """Dev-only: analyze the stored simulation batch instead of live messages."""
         insights_channel = self.get_insights_channel()
         if insights_channel is None:
             print("No #ai-insights channel found for simulation.")
             return
 
-        if not self.sim_batches:
+        # FIXED
+        if self.sim_batches is None:
             await insights_channel.send("⚠️ No simulation_batches collection available.")
             return
 
@@ -163,11 +154,6 @@ End with one single-sentence observation that feels like a mirror, not advice.
             f"🪞 **The Mirror — Simulation Analysis for <@{user_id}>**\n"
             f"```markdown\n{summary}\n```"
         )
-
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        # analysis itself is triggered explicitly from other cogs, not on every message
-        return
 
 async def setup(bot):
     cog = Analysis(bot)
